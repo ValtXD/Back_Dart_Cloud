@@ -35,7 +35,12 @@ COPY . .
 
 # Ativa e compila com Dart Frog
 RUN /usr/local/dart-sdk/bin/dart pub global activate dart_frog_cli
-RUN /usr/local/dart-sdk/bin/dart_frog build
+
+# Adiciona o diretório de cache do Pub ao PATH para que o executável dart_frog seja encontrado
+ENV PATH="/root/.pub-cache/bin:${PATH}"
+
+# Agora o sistema saberá onde encontrar o comando "dart_frog"
+RUN dart_frog build
 
 # -------- Estágio final (runtime) --------
 FROM debian:stable-slim
