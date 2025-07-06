@@ -1,23 +1,27 @@
-# Estágio base para instalar o Dart SDK
+# Estágio base para instalar o Dart SDK por download direto
 FROM debian:stable-slim AS dart_installer_base
 
-# Instalar dependências básicas para repositórios e certificados
+# Instalar dependências necessárias para download e extração
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
-    gnupg \
-    apt-transport-https \
+    unzip \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/* # Limpa o cache do apt imediatamente
+    openssl \
+    && rm -rf /var/lib/apt/lists/* # Limpa cache do apt
 
-# Adicionar o repositório oficial do Dart e instalar o SDK
-# CORRIGIDO: URL do repositório Dart para 'https://apt.dart.dev'
-RUN curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/dart.gpg \
-    && echo 'deb [signed-by=/usr/share/keyrings/dart.gpg] https://apt.dart.dev stable main' | tee /etc/apt/sources.list.d/dart_stable.list \
-    && apt-get update && apt-get install -y --no-install-recommends dart \
-    && rm -rf /var/lib/apt/lists/* # Limpa cache do apt novamente
+# Definir a versão do Dart SDK para download
+# IMPORTANTE: Escolha uma versão estável específica aqui, ex: 3.4.0, 3.3.0
+ARG DART_SDK_VERSION=3.4.0 
+
+# Fazer download direto do Dart SDK e extraí-lo
+RUN curl -fsSL https://storage.googleapis.com/dart-archive/dart/sdk/${DART_SDK_VERSION}/dartsdk-linux-x64-release.zip -o /tmp/dartsdk.zip \
+    && unzip /tmp/dartsdk.zip -d /usr/local \
+    && rm /tmp/dartsdk.zip
+
+# Adicionar o diretório bin do Dart SDK ao PATH global
+ENV PATH="/usr/local/dart-sdk/bin:$PATH"
 
 # --- Estágio de Construção (Build Stage) ---
-# Usar a imagem com Dart SDK instalado para construir a aplicação
 FROM dart_installer_base AS build
 
 # Defina o diretório de trabalho no contêiner
@@ -38,14 +42,13 @@ RUN dart pub global activate dart_frog_cli
 RUN dart_frog build # Output vai para /app/build (contém bin/server.dart)
 
 # --- Estágio de Execução (Runtime Stage) ---
-# Usar uma imagem Debian-slim para o runtime e copiar apenas o necessário
 FROM debian:stable-slim
 
 # Instale dependências de runtime mínimas
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     openssl \
-    && rm -rf /var/lib/apt/lists/* # Limpa cache do apt
+    && rm -rf /var/lib/apt/lists/*
 
 # Defina o diretório de trabalho
 WORKDIR /app
@@ -53,13 +56,15 @@ WORKDIR /app
 # Copie os arquivos compilados do projeto Dart Frog
 COPY --from=build /app/build /app/build
 
-# COPIAR APENAS OS COMPONENTES ESSENCIAIS DO DART SDK DO ESTÁGIO DE BUILD PARA O RUNTIME
-# O Dart SDK é instalado em /usr/lib/dart e /usr/bin/dart na imagem debian
-COPY --from=build /usr/lib/dart /usr/lib/dart
-COPY --from=build /usr/bin/dart /usr/bin/dart
+# COPIAR O DART SDK COMPLETO DO ESTÁGIO DE BUILD PARA O RUNTIME
+# O Dart SDK está em /usr/local/dart-sdk (do download direto)
+COPY --from=build /usr/local/dart-sdk /usr/local/dart-sdk
+
+# Adicione o diretório bin do Dart SDK ao PATH do ambiente de execução
+ENV PATH="/usr/local/dart-sdk/bin:$PATH"
 
 # Defina a porta que o Render irá expor
 ENV PORT 8080
 
 # Comando para executar a aplicação Dart Frog compilada
-CMD ["/usr/bin/dart", "build/bin/server.dart"]
+CMD ["/usr/local/dart-sdk/bin/dart", "build/bin/server.dart"]
