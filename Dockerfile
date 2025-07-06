@@ -17,7 +17,7 @@ COPY . .
 # Compile o projeto Dart Frog para uma imagem de produção
 # 'dart_frog build' gera o output na pasta 'build'
 RUN dart pub global activate dart_frog_cli
-RUN dart_frog build # <--- Comando de build correto, gera em /app/build
+RUN dart_frog build
 
 # --- Estágio de Execução (Runtime Stage) ---
 FROM alpine:latest
@@ -30,7 +30,7 @@ WORKDIR /app
 
 # Copie o *conteúdo* da pasta 'build' do estágio de construção
 # Isso incluirá 'bin/server.dart' e outros assets compilados
-COPY --from=build /app/build /app/build # <--- CORRIGIDO: Copia a pasta 'build' inteira
+COPY --from=build /app/build /app/build
 
 # Se o dart_frog CLI não for ativado no runtime stage, adicione esta linha:
 RUN dart pub global activate dart_frog_cli
@@ -40,8 +40,4 @@ ENV PORT 8080
 
 # Comando para executar a aplicação Dart Frog compilada
 # O 'dart_frog serve build' espera que a pasta 'build' esteja no WORKDIR
-CMD ["/root/.pub-global/bin/dart_frog", "serve", "build"] # <--- CORRIGIDO: Caminho absoluto para dart_frog no PATH global de pub
-
-# NOTA: O caminho '/root/.pub-global/bin/dart_frog' é onde 'dart pub global activate' instala executáveis
-# em imagens baseadas em Alpine (como 'alpine:latest'). Se tiver problemas, verifique o log de 'dart pub global activate'
-# na sua máquina local ou no log do Docker build para ver o caminho exato.
+CMD ["/root/.pub-global/bin/dart_frog", "serve", "build"]
