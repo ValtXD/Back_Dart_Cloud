@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Define a versão do Dart SDK
+# Define a versão do Dart SDK (CORRIGIDO)
 ARG DART_SDK_VERSION=3.8.1
 
 # Faz o download e extrai o SDK do Dart
@@ -20,41 +20,43 @@ RUN curl -fsSL https://storage.googleapis.com/dart-archive/channels/stable/relea
 # -------- Estágio de build --------
 FROM dart_installer_base AS build
 
-# Define diretório de trabalho
+# Define o diretório de trabalho
 WORKDIR /app
 
-# Copia arquivos de dependência
-COPY pubspec.yaml .  
+# (CORRIGIDO) Define o PATH para incluir o SDK do Dart e o cache do pub.
+# Isso simplifica todos os comandos seguintes.
+ENV PATH="/usr/local/dart-sdk/bin:/root/.pub-cache/bin:${PATH}"
+
+# Copia arquivos de dependência primeiro para aproveitar o cache do Docker
+COPY pubspec.yaml .
 COPY pubspec.lock .
 
-# Instala dependências
-RUN /usr/local/dart-sdk/bin/dart pub get
+# Instala dependências (comando simplificado)
+RUN dart pub get
 
 # Copia o restante do projeto
 COPY . .
 
-# Ativa e compila com Dart Frog
-RUN /usr/local/dart-sdk/bin/dart pub global activate dart_frog_cli
-
-# Adiciona o diretório de cache do Pub ao PATH para que o executável dart_frog seja encontrado
-ENV PATH="/root/.pub-cache/bin:${PATH}"
-
-# Agora o sistema saberá onde encontrar o comando "dart_frog"
+# Ativa e compila com Dart Frog (comandos simplificados)
+RUN dart pub global activate dart_frog_cli
 RUN dart_frog build
 
 # -------- Estágio final (runtime) --------
 FROM debian:stable-slim
 
-# Instala dependências mínimas
+# Instala dependências mínimas do runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Define diretório de trabalho
+# Define o diretório de trabalho
 WORKDIR /app
 
-# Copia os arquivos compilados da build
+# (MELHORIA) Adiciona o SDK ao PATH para simplificar o comando de execução
+ENV PATH="/usr/local/dart-sdk/bin:${PATH}"
+
+# Copia os arquivos compilados do estágio de build
 COPY --from=build /app/build /app/build
 
 # Copia o Dart SDK para o runtime
@@ -63,5 +65,5 @@ COPY --from=build /usr/local/dart-sdk /usr/local/dart-sdk
 # Define a porta exposta
 ENV PORT 8080
 
-# Comando para executar o servidor Dart Frog compilado
-CMD ["/usr/local/dart-sdk/bin/dart", "build/bin/server.dart"]
+# (MELHORIA) Comando simplificado para executar o servidor Dart Frog compilado
+CMD ["dart", "build/bin/server.dart"]
