@@ -15,39 +15,33 @@ RUN dart pub get
 COPY . .
 
 # Compile o projeto Dart Frog para uma imagem de produção
-# O comando 'dart_frog build' por si só já gera o output na pasta 'build'
+# 'dart_frog build' gera o output na pasta 'build'
 RUN dart pub global activate dart_frog_cli
-RUN dart_frog build # <--- CORRIGIDO: Removida a flag --output
+RUN dart_frog build # <--- Comando de build correto, gera em /app/build
 
 # --- Estágio de Execução (Runtime Stage) ---
 FROM alpine:latest
 
-# Instale dependências de runtime, se houver (para PostgreSQL, etc.)
-# ca-certificates: necessário para HTTPS
-# openssl: pode ser necessário para algumas libs de rede
-# bash: para scripts mais complexos, mas não estritamente necessário para CMD simples
+# Instale dependências de runtime
 RUN apk add --no-cache ca-certificates openssl
 
 # Defina o diretório de trabalho
 WORKDIR /app
 
-# Copie o executável compilado do estágio de construção
-# O output de 'dart_frog build' vai para 'build/serve' ou 'build/prod/serve' dependendo da versão
-# Para Dart Frog 1.x, o executável está em 'build/serve' e é executado via 'dart_frog serve build'
-COPY --from=build /app/build/serve /app/build/serve # <--- CORRIGIDO: Copiar o diretório de serve
+# Copie o *conteúdo* da pasta 'build' do estágio de construção
+# Isso incluirá 'bin/server.dart' e outros assets compilados
+COPY --from=build /app/build /app/build # <--- CORRIGIDO: Copia a pasta 'build' inteira
 
-# Copie o arquivo .env (apenas se for usado no contêiner, mas prefira variáveis de ambiente do Render)
-# COPY .env . 
+# Se o dart_frog CLI não for ativado no runtime stage, adicione esta linha:
+RUN dart pub global activate dart_frog_cli
 
-# Defina a porta que o Render irá expor (normalmente 8080)
+# Defina a porta que o Render irá expor
 ENV PORT 8080
 
 # Comando para executar a aplicação Dart Frog compilada
-# CORRIGIDO: Use 'dart_frog serve build' para iniciar o servidor a partir do build
-CMD ["/usr/bin/dart_frog", "serve", "build"] # <--- CORRIGIDO: Comando de execução
+# O 'dart_frog serve build' espera que a pasta 'build' esteja no WORKDIR
+CMD ["/root/.pub-global/bin/dart_frog", "serve", "build"] # <--- CORRIGIDO: Caminho absoluto para dart_frog no PATH global de pub
 
-# NOTA: O 'dart_frog' CLI deve estar no PATH do runtime stage.
-# Se o CMD acima falhar com "command not found", pode ser necessário:
-# RUN dart pub global activate dart_frog_cli # Adicionar no runtime stage também
-# E então usar: CMD ["/root/.pub-global/bin/dart_frog", "serve", "build"]
-# Ou adaptar o PATH. Mas geralmente, o 'dart:stable' base já configura isso.
+# NOTA: O caminho '/root/.pub-global/bin/dart_frog' é onde 'dart pub global activate' instala executáveis
+# em imagens baseadas em Alpine (como 'alpine:latest'). Se tiver problemas, verifique o log de 'dart pub global activate'
+# na sua máquina local ou no log do Docker build para ver o caminho exato.
