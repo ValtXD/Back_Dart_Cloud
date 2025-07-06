@@ -1,42 +1,49 @@
-# Estágio de construção
+# Use a imagem oficial do Dart como base para o estágio de construção
 FROM dart:stable AS build
 
-# Configuração do ambiente
+# Defina o diretório de trabalho no contêiner
 WORKDIR /app
 
-# Copiar e resolver dependências primeiro (cache eficiente)
-COPY pubspec.yaml pubspec.lock ./
+# Copie os arquivos pubspec
+COPY pubspec.yaml .
+COPY pubspec.lock .
+
+# Baixe as dependências
 RUN dart pub get
 
-# Copiar o resto do código
+# Copie todo o restante do projeto
 COPY . .
 
-# Instalar e usar dart_frog_cli
+# Compile o projeto Dart Frog para produção
+# 'dart_frog build' gera o output na pasta 'build'
 RUN dart pub global activate dart_frog_cli
 RUN dart_frog build
 
-# --- Estágio de execução ---
-FROM alpine:latest
+# --- Estágio de Execução (Runtime Stage) ---
+# Usar uma imagem base Debian-slim para melhor compatibilidade com os binários Dart.
+# Isso resolve o problema de 'dart: not found' devido a incompatibilidade de libc.
+FROM debian:stable-slim
 
-# Instalar dependências mínimas
-RUN apk add --no-cache \
+# Instale dependências de runtime necessárias (ca-certificates para HTTPS, openssl para SSL)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     openssl \
-    libc6-compat
+    && rm -rf /var/lib/apt/lists/* # Limpa cache do apt
 
-# Configurar ambiente
+# Defina o diretório de trabalho
 WORKDIR /app
 
-# Copiar apenas os arquivos necessários do SDK Dart
-COPY --from=build /usr/lib/dart/bin/dart /usr/bin/dart
-COPY --from=build /usr/lib/dart/lib /usr/lib/dart/lib
-
-# Copiar build do aplicativo
+# Copie os arquivos compilados do projeto Dart Frog (o executável do servidor)
+# O 'dart_frog build' coloca o executável principal em /app/build/bin/server.dart
 COPY --from=build /app/build /app/build
 
-# Variáveis de ambiente
-ENV PORT=8080
-EXPOSE $PORT
+# COPIAR O DART SDK COMPLETO DO ESTÁGIO DE BUILD PARA O RUNTIME
+# Este é o caminho padrão do SDK na imagem dart:stable
+COPY --from=build /opt/dart /opt/dart
 
-# Comando de execução
-CMD ["dart", "build/bin/server.dart"]
+# Defina a porta que o Render irá expor
+ENV PORT 8080
+
+# Comando para executar a aplicação Dart Frog compilada
+# Agora '/opt/dart/bin/dart' estará disponível e será compatível com a base Debian
+CMD ["/opt/dart/bin/dart", "build/bin/server.dart"]
