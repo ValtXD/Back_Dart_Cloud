@@ -1,10 +1,29 @@
-# Use a imagem oficial do Dart como base para ambos os estágios de construção e execução
-FROM dart:stable
+# Estágio base para instalar o Dart SDK por download direto
+FROM debian:stable-slim AS dart_installer_base
+
+# Instalar dependências necessárias para download e extração
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    unzip \
+    ca-certificates \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Definir a versão do Dart SDK para download
+ARG DART_SDK_VERSION=3.4.0
+
+# Fazer download direto do Dart SDK e extraí-lo
+RUN curl -fsSL https://storage.googleapis.com/dart-archive/dart/sdk/${DART_SDK_VERSION}/dartsdk-linux-x64-release.zip -o /tmp/dartsdk.zip \
+    && unzip /tmp/dartsdk.zip -d /usr/local \
+    && rm /tmp/dartsdk.zip
+
+# --- Estágio de Construção (Build Stage) ---
+FROM dart_installer_base AS build
 
 # Defina o diretório de trabalho no contêiner
 WORKDIR /app
 
-# Copie os arquivos pubspec para que as dependências possam ser baixadas primeiro
+# Copie os arquivos pubspec
 COPY pubspec.yaml .
 COPY pubspec.lock .
 
@@ -14,18 +33,31 @@ RUN dart pub get
 # Copie todo o restante do projeto
 COPY . .
 
-# Compile o projeto Dart Frog para uma imagem de produção
-# 'dart pub global activate' instala o 'dart_frog' em ~/.pub-global/bin/
+# Compile o projeto Dart Frog para produção
 RUN dart pub global activate dart_frog_cli
-RUN dart_frog build # O output vai para /app/build (contendo bin/server.dart)
+RUN dart_frog build
+
+# --- Estágio de Execução (Runtime Stage) ---
+FROM debian:stable-slim
+
+# Instale dependências de runtime mínimas
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Defina o diretório de trabalho
+WORKDIR /app
+
+# Copie os arquivos compilados do projeto Dart Frog
+COPY --from=build /app/build /app/build
+
+# COPIAR O DART SDK COMPLETO DO ESTÁGIO DE BUILD PARA O RUNTIME
+COPY --from=build /usr/local/dart-sdk /usr/local/dart-sdk
 
 # Defina a porta que o Render irá expor
 ENV PORT 8080
 
-# Adicione o diretório de executáveis globais do pub ao PATH
-# Isso garante que 'dart_frog' seja encontrado no PATH.
-ENV PATH="/root/.pub-global/bin:$PATH"
-
-# Comando para executar a aplicação Dart Frog compilada
-# O 'dart_frog serve build' espera que a pasta 'build' esteja no WORKDIR
-CMD ["dart_frog", "serve", "build"]
+# REMOVIDO: O CMD do Dockerfile não é necessário se o "Start Command" do Render estiver preenchido.
+# Se o "Start Command" do Render estiver vazio e você quiser que o Dockerfile defina o comando, use:
+# CMD ["/usr/local/dart-sdk/bin/dart", "build/bin/server.dart"]
