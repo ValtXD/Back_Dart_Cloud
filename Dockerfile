@@ -15,31 +15,39 @@ RUN dart pub get
 COPY . .
 
 # Compile o projeto Dart Frog para uma imagem de produção
-# Certifique-se de que 'funfono_backend' é o nome do seu pacote no pubspec.yaml
+# O comando 'dart_frog build' por si só já gera o output na pasta 'build'
 RUN dart pub global activate dart_frog_cli
-RUN dart_frog build --output build/prod
+RUN dart_frog build # <--- CORRIGIDO: Removida a flag --output
 
 # --- Estágio de Execução (Runtime Stage) ---
 FROM alpine:latest
 
 # Instale dependências de runtime, se houver (para PostgreSQL, etc.)
-RUN apk add --no-cache ca-certificates openssl bash
+# ca-certificates: necessário para HTTPS
+# openssl: pode ser necessário para algumas libs de rede
+# bash: para scripts mais complexos, mas não estritamente necessário para CMD simples
+RUN apk add --no-cache ca-certificates openssl
 
 # Defina o diretório de trabalho
 WORKDIR /app
 
 # Copie o executável compilado do estágio de construção
-COPY --from=build /app/build/prod /app/build/prod
+# O output de 'dart_frog build' vai para 'build/serve' ou 'build/prod/serve' dependendo da versão
+# Para Dart Frog 1.x, o executável está em 'build/serve' e é executado via 'dart_frog serve build'
+COPY --from=build /app/build/serve /app/build/serve # <--- CORRIGIDO: Copiar o diretório de serve
 
-# Copie o arquivo .env para o ambiente de produção
-# ATENÇÃO: Certifique-se de que o .env está no .gitignore para não subir para o repositório!
-# No Render, você configurará variáveis de ambiente diretamente na interface, não usando o .env
-# Mas se você insistir em usar um .env para defaults, pode copiar assim:
+# Copie o arquivo .env (apenas se for usado no contêiner, mas prefira variáveis de ambiente do Render)
 # COPY .env . 
 
 # Defina a porta que o Render irá expor (normalmente 8080)
 ENV PORT 8080
 
-# Comando para executar a aplicação Dart Frog
-# O Dart Frog precisa do 'serve' para iniciar o servidor
-CMD ["/usr/bin/dart", "build/prod/serve"]
+# Comando para executar a aplicação Dart Frog compilada
+# CORRIGIDO: Use 'dart_frog serve build' para iniciar o servidor a partir do build
+CMD ["/usr/bin/dart_frog", "serve", "build"] # <--- CORRIGIDO: Comando de execução
+
+# NOTA: O 'dart_frog' CLI deve estar no PATH do runtime stage.
+# Se o CMD acima falhar com "command not found", pode ser necessário:
+# RUN dart pub global activate dart_frog_cli # Adicionar no runtime stage também
+# E então usar: CMD ["/root/.pub-global/bin/dart_frog", "serve", "build"]
+# Ou adaptar o PATH. Mas geralmente, o 'dart:stable' base já configura isso.
