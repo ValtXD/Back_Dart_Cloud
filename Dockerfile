@@ -1,32 +1,64 @@
-# Etapa de construção
-FROM dart:stable AS build
+# Estágio base para instalar o Dart SDK por download direto
+FROM debian:stable-slim AS dart_installer_base
 
-WORKDIR /app
-
-COPY pubspec.yaml pubspec.lock ./
-RUN dart pub get
-COPY . .
-
-RUN dart pub global activate dart_frog_cli
-RUN dart_frog build
-
-# Etapa de execução
-FROM debian:stable-slim AS runtime
-
-WORKDIR /app
-
-# Instala dependências básicas
+# Instalar dependências necessárias para download e extração
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl unzip ca-certificates openssl gnupg \
+    curl \
+    unzip \
+    ca-certificates \
+    openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Tenta instalar Dart via apt, ou baixa manualmente se falhar
-RUN set -e; \
-    curl -fsSL https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/dart.gpg || echo "Falha na chave"; \
-    echo "deb [signed-by=/usr/share/keyrings/dart.gpg] https://apt.dart.dev stable main" > /etc/apt/sources.list.d/dart_stable.list || echo "Erro ao criar fonte"; \
-    apt-get update || echo "Falha ao atualizar apt"; \
-    if apt-get install -y --no-install-recommends dart; then \
-        echo "Dart instalado via apt."; \
-    else \
-        echo "Falha no apt. Instalando Dart manualmente..."; \
-        curl -O https://storage.googleapis.com/dart-archive/channels/stable/release/latest/sdk
+# Definir a versão do Dart SDK para download
+ARG DART_SDK_VERSION=3.4.0 # ESCOLHA A VERSÃO ESTÁVEL ESPECÍFICA AQUI
+
+# Fazer download direto do Dart SDK e extraí-lo
+# Ele será extraído para /usr/local/dart-sdk
+RUN curl -fsSL https://storage.googleapis.com/dart-archive/dart/sdk/${DART_SDK_VERSION}/dartsdk-linux-x64-release.zip -o /tmp/dartsdk.zip \
+    && unzip /tmp/dartsdk.zip -d /usr/local \
+    && rm /tmp/dartsdk.zip
+
+# --- Estágio de Construção (Build Stage) ---
+FROM dart_installer_base AS build
+
+# Defina o diretório de trabalho no contêiner
+WORKDIR /app
+
+# Copie os arquivos pubspec
+COPY pubspec.yaml .
+COPY pubspec.lock .
+
+# Baixe as dependências
+RUN dart pub get
+
+# Copie todo o restante do projeto
+COPY . .
+
+# Compile o projeto Dart Frog para produção
+RUN dart pub global activate dart_frog_cli
+RUN dart_frog build # Output vai para /app/build (contém bin/server.dart)
+
+# --- Estágio de Execução (Runtime Stage) ---
+FROM debian:stable-slim
+
+# Instale dependências de runtime mínimas
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Defina o diretório de trabalho
+WORKDIR /app
+
+# Copie os arquivos compilados do projeto Dart Frog
+COPY --from=build /app/build /app/build
+
+# COPIAR O DART SDK COMPLETO DO ESTÁGIO DE BUILD PARA O RUNTIME
+# O Dart SDK é instalado em /usr/local/dart-sdk (do download direto)
+COPY --from=build /usr/local/dart-sdk /usr/local/dart-sdk 
+
+# Defina a porta que o Render irá expor
+ENV PORT 8080
+
+# Comando para executar a aplicação Dart Frog compilada
+CMD ["/usr/local/dart-sdk/bin/dart", "build/bin/server.dart"] 
