@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Define a versão do Dart SDK
-ARG DART_SDK_VERSION=3.4.0
+ARG DART_SDK_VERSION=3.8.1
 
 # Faz o download e extrai o SDK do Dart
 RUN curl -fsSL https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_SDK_VERSION}/sdk/dartsdk-linux-x64-release.zip -o /tmp/dartsdk.zip \
