@@ -1,43 +1,42 @@
-# Use a imagem oficial do Dart como base
+# Estágio de construção
 FROM dart:stable AS build
 
-# Defina o diretório de trabalho no contêiner
+# Configuração do ambiente
 WORKDIR /app
 
-# Copie os arquivos pubspec
-COPY pubspec.yaml .
-COPY pubspec.lock .
-
-# Baixe as dependências
+# Copiar e resolver dependências primeiro (cache eficiente)
+COPY pubspec.yaml pubspec.lock ./
 RUN dart pub get
 
-# Copie todo o restante do projeto
+# Copiar o resto do código
 COPY . .
 
-# Compile o projeto Dart Frog para produção
-# 'dart_frog build' gera o output na pasta 'build'
+# Instalar e usar dart_frog_cli
 RUN dart pub global activate dart_frog_cli
 RUN dart_frog build
 
-# --- Estágio de Execução (Runtime Stage) ---
+# --- Estágio de execução ---
 FROM alpine:latest
 
-# Instale dependências de runtime
-RUN apk add --no-cache ca-certificates openssl
+# Instalar dependências mínimas
+RUN apk add --no-cache \
+    ca-certificates \
+    openssl \
+    libc6-compat
 
-# Defina o diretório de trabalho
+# Configurar ambiente
 WORKDIR /app
 
-# Copie os arquivos compilados do projeto Dart Frog
+# Copiar apenas os arquivos necessários do SDK Dart
+COPY --from=build /usr/lib/dart/bin/dart /usr/bin/dart
+COPY --from=build /usr/lib/dart/lib /usr/lib/dart/lib
+
+# Copiar build do aplicativo
 COPY --from=build /app/build /app/build
 
-# COPIAR O DART SDK COMPLETO DO ESTÁGIO DE BUILD PARA O RUNTIME
-# Este é o caminho padrão do SDK na imagem dart:stable
-COPY --from=build /opt/dart /opt/dart
+# Variáveis de ambiente
+ENV PORT=8080
+EXPOSE $PORT
 
-# Defina a porta que o Render irá expor
-ENV PORT 8080
-
-# Comando para executar a aplicação Dart Frog compilada
-# Agora 'dart' estará no /opt/dart/bin
-CMD ["/opt/dart/bin/dart", "build/bin/server.dart"] 
+# Comando de execução
+CMD ["dart", "build/bin/server.dart"]
