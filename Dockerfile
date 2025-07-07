@@ -6,14 +6,13 @@ WORKDIR /app
 
 # Define o diretório para o pub cache e adiciona ao PATH.
 # Isso garante que o 'dart_frog' CLI e outras ferramentas globais sejam encontradas.
-ENV PUB_CACHE="/app/.pub-cache"
+ENV PUB_CACHE="/app/.pub-cache" 
 ENV PATH="/app/.pub-cache/bin:$PATH"
 
 # Copia os arquivos pubspec (pubspec.yaml e pubspec.lock).
 COPY pubspec.* ./
 
 # Instala as dependências do Dart.
-# Se --enforce-lockfile causa problemas, tente apenas 'RUN dart pub get'.
 RUN dart pub get --enforce-lockfile
 
 # Ativa a ferramenta CLI do Dart Frog.
@@ -26,22 +25,21 @@ COPY . .
 RUN dart_frog build
 
 # Estágio final: Imagem para rodar o aplicativo de produção.
-# Usamos a imagem dart:stable novamente para ter o runtime Dart disponível.
 FROM dart:stable
 
 # Define o diretório de trabalho na imagem final.
 WORKDIR /app
 
-# NOVO: Definir DART_TOOL_ROOT e PUB_CACHE para o local esperado
+# Define o PUB_CACHE e DART_TOOL_ROOT para o local padrão esperado pelo Dart na imagem final.
 ENV DART_TOOL_ROOT="/usr/lib/dart"
-ENV PUB_CACHE="/usr/lib/dart/.pub-cache" 
+ENV PUB_CACHE="/usr/lib/dart/.pub-cache"
 
 # Copia o diretório 'build' inteiro (que contém o 'bin/server.dart' e 'public/') do estágio de build.
 COPY --from=build /app/build /app/build
 
 # COPIA O PUB_CACHE INTEIRO DO ESTÁGIO DE BUILD PARA O LOCAL PADRÃO DA IMAGEM FINAL.
-# Isso é fundamental para resolver os erros "No such file or directory" no cache.
-COPY --from=build /app/.pub-cache /usr/lib/dart/.pub-cache
+# ESTA É A CORREÇÃO CRÍTICA DO CAMINHO DE DESTINO.
+COPY --from=build /app/.pub-cache /usr/lib/dart/.pub-cache 
 
 # Expor a porta que o Dart Frog vai escutar (padrão 8080).
 EXPOSE 8080
