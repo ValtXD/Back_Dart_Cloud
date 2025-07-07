@@ -10,6 +10,10 @@ COPY pubspec.* ./
 # Instala as dependências do Dart
 RUN dart pub get
 
+# *** NOVO PASSO: Ativa a ferramenta CLI do Dart Frog ***
+# Isso garante que o comando 'dart_frog' esteja disponível.
+RUN dart pub global activate dart_frog_cli
+
 # Copia o restante do código da sua aplicação Dart Frog
 COPY . .
 
@@ -29,5 +33,4 @@ COPY --from=build /app/build/server /app/server
 EXPOSE 8080
 
 # Define o comando para iniciar o servidor
-# Este é o seu "Start Command" dentro do Dockerfile
 CMD ["/app/server"]
