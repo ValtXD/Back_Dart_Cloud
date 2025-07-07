@@ -3,15 +3,17 @@ FROM dart:stable AS build
 
 WORKDIR /app
 
+# Define o diretório para o pub cache e adiciona ao PATH
+ENV PUB_CACHE="/app/cache/pub"
+ENV PATH="/app/cache/pub/bin:$PATH" 
+
 # Copia os arquivos pubspec
 COPY pubspec.* ./
 
-# Instala as dependências e armazena-as em um volume de cache para reutilização
-# Criamos um diretório para o pub cache
-ENV PUB_CACHE="/app/cache/pub"
+# Instala as dependências
 RUN dart pub get
 
-# Ativa a ferramenta CLI do Dart Frog
+# Ativa a ferramenta CLI do Dart Frog. Agora o comando estará no PATH.
 RUN dart pub global activate dart_frog_cli
 
 # Copia o restante do código da sua aplicação Dart Frog
@@ -21,15 +23,16 @@ COPY . .
 RUN dart_frog build
 
 # Estágio final: Imagem para rodar o aplicativo de produção
-# Usamos a mesma imagem base leve para ter o runtime Dart
-FROM dart:stable 
+FROM dart:stable
 
 # Define o diretório de trabalho na imagem final
 WORKDIR /app
 
-# *** NOVO: Copia APENAS o diretório 'build' e o 'pub cache' do estágio de build ***
-# O diretório 'build' contém o servidor compilado e assets.
-# O 'pub cache' contém as dependências do Dart.
+# Define o diretório para o pub cache no estágio final também, e adiciona ao PATH
+ENV PUB_CACHE="/app/cache/pub"
+ENV PATH="/app/cache/pub/bin:$PATH" 
+
+# Copia o diretório 'build' e o 'pub cache' do estágio de build
 COPY --from=build /app/build /app/build
 COPY --from=build /app/cache/pub /root/.pub-cache 
 
